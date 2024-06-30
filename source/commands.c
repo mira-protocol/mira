@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "app.h"
+#include "url.h"
 #include "safe.h"
 #include "socket.h"
-#include "app.h"
 #include "commands.h"
 
 void Command_Help(char** args, size_t length) {
@@ -20,10 +21,16 @@ void Command_Help(char** args, size_t length) {
 		return; \
 	}
 
+#define SEND(FD, BUF, LEN, FLAGS) \
+	if (send(FD, BUF, LEN, FLAGS) < 0) { \
+		perror("send"); \
+		return; \
+	}
+
 void Command_Goto(char** args, size_t length) {
 	App* app = App_Instance();
 
-	if (app->sock >= 0) {
+	if (app->sock <= 0) {
 		puts("Closing existing connection..");
 		close(app->sock);
 	}
@@ -33,11 +40,22 @@ void Command_Goto(char** args, size_t length) {
 		perror("socket");
 	}
 
+	Url url = ParseURL(args[1]);
+
+	if (!url.valid) {
+		fprintf(stderr, "Invalid URL\n");
+		return;
+	}
+
+	printf("Domain: %s\n", url.domain);
+	printf("Port: %d\n", url.port);
+	printf("Path: %s\n", url.path);
+
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
-	addr.sin_port   = htons(atoi(args[2]));
+	addr.sin_port   = htons(url.port);
 
-	if (inet_pton(AF_INET, args[1], &addr.sin_addr) < 0) {
+	if (inet_pton(AF_INET, url.domain, &addr.sin_addr) < 0) {
 		fprintf(stderr, "Invalid address: '%s'\n", args[1]);
 		return;
 	}
@@ -49,12 +67,14 @@ void Command_Goto(char** args, size_t length) {
 
 	puts("Connected");
 
-	// simple default request for now
-	const char* req = "G\n\n";
-	if (send(app->sock, req, strlen(req), 0) < 0) {
-		perror("send");
-		return;
-	}
+	// send get request
+	uint8_t packetID = 'G';
+	char    newLine  = '\n';
+	SEND(app->sock, &packetID, 1, 0);
+	SEND(app->sock, url.domain, strlen(url.domain), 0);
+	SEND(app->sock, &newLine, 1, 0);
+	SEND(app->sock, url.path, strlen(url.path), 0);
+	SEND(app->sock, &newLine, 1, 0);
 
 	bool responseCompleted = false;
 	while (!responseCompleted) {
@@ -92,4 +112,6 @@ void Command_Goto(char** args, size_t length) {
 			}
 		}
 	}
+
+	FreeURL(&url);
 }

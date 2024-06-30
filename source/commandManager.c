@@ -14,7 +14,7 @@ CommandManager CommandManager_New(void) {
 		"help", 0, &Command_Help
 	});
 	CommandManager_Add(&ret, (Command) {
-		"goto", 2, &Command_Goto
+		"goto", 1, &Command_Goto
 	});
 	return ret;
 }
