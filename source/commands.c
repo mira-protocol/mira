@@ -30,16 +30,6 @@ void Command_Help(char** args, size_t length) {
 void Command_Goto(char** args, size_t length) {
 	App* app = App_Instance();
 
-	if (app->sock <= 0) {
-		puts("Closing existing connection..");
-		close(app->sock);
-	}
-
-	app->sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (app->sock < 0) {
-		perror("socket");
-	}
-
 	Url url = ParseURL(args[1]);
 
 	if (!url.valid) {
@@ -51,21 +41,33 @@ void Command_Goto(char** args, size_t length) {
 	printf("Port: %d\n", url.port);
 	printf("Path: %s\n", url.path);
 
-	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
-	addr.sin_port   = htons(url.port);
+	if (strcmp(url.domain, "")) {
+		if (app->sock <= 0) {
+			puts("Closing existing connection..");
+			close(app->sock);
+		}
 
-	if (inet_pton(AF_INET, url.domain, &addr.sin_addr) < 0) {
-		fprintf(stderr, "Invalid address: '%s'\n", args[1]);
-		return;
+		app->sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (app->sock < 0) {
+			perror("socket");
+		}
+
+		struct sockaddr_in addr;
+		addr.sin_family = AF_INET;
+		addr.sin_port   = htons(url.port);
+
+		if (inet_pton(AF_INET, url.domain, &addr.sin_addr) < 0) {
+			fprintf(stderr, "Invalid address: '%s'\n", args[1]);
+			return;
+		}
+
+		if (connect(app->sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
+			perror("connect");
+			return;
+		}
+
+		puts("Connected");
 	}
-
-	if (connect(app->sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-		perror("connect");
-		return;
-	}
-
-	puts("Connected");
 
 	// send get request
 	uint8_t packetID = 'G';
